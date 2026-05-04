@@ -1,122 +1,110 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useState } from 'react';
+import './App.css';
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [file, setFile] = useState(null);
+  const [query, setQuery] = useState('');
+  const [chat, setChat] = useState([]);
+  const [uploadStatus, setUploadStatus] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleFileChange = (e) => {
+    setFile(e.target.files[0]);
+  };
+
+  const handleUpload = async () => {
+    if (!file) {
+      setUploadStatus('Please select a file first.');
+      return;
+    }
+    setUploadStatus('Uploading and processing...');
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('http://127.0.0.1:8000/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setUploadStatus('✅ ' + data.message);
+      } else {
+        setUploadStatus('❌ Error: ' + data.detail);
+      }
+    } catch (err) {
+      setUploadStatus('❌ Failed to connect to server.');
+    }
+  };
+
+  const handleAsk = async (e) => {
+    e.preventDefault();
+    if (!query.trim()) return;
+
+    const userMsg = { sender: 'user', text: query };
+    setChat((prev) => [...prev, userMsg]);
+    setQuery('');
+    setLoading(true);
+
+    try {
+      const res = await fetch('http://127.0.0.1:8000/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: userMsg.text }),
+      });
+      const data = await res.json();
+      
+      if (res.ok) {
+        setChat((prev) => [...prev, { sender: 'ai', text: data.response }]);
+      } else {
+        setChat((prev) => [...prev, { sender: 'ai', text: 'Error: ' + data.detail }]);
+      }
+    } catch (err) {
+      setChat((prev) => [...prev, { sender: 'ai', text: 'Failed to connect to server.' }]);
+    }
+    setLoading(false);
+  };
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="container">
+      <header>
+        <h1>📄 Chat with PDF</h1>
+        <p>Upload a document and ask questions about it.</p>
+      </header>
 
-      <div className="ticks"></div>
+      <div className="upload-section card">
+        <input type="file" accept=".pdf" onChange={handleFileChange} />
+        <button onClick={handleUpload}>Upload PDF</button>
+        {uploadStatus && <p className="status">{uploadStatus}</p>}
+      </div>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
+      <div className="chat-section card">
+        <div className="chat-window">
+          {chat.length === 0 && <p className="empty-chat">No messages yet. Ask a question!</p>}
+          {chat.map((msg, idx) => (
+            <div key={idx} className={`message ${msg.sender}`}>
+              <div className="bubble">{msg.text}</div>
+            </div>
+          ))}
+          {loading && (
+            <div className="message ai">
+              <div className="bubble typing">Thinking...</div>
+            </div>
+          )}
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+        <form onSubmit={handleAsk} className="input-form">
+          <input 
+            type="text" 
+            placeholder="Ask a question about your PDF..." 
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <button type="submit" disabled={loading}>Send</button>
+        </form>
+      </div>
+    </div>
+  );
 }
 
-export default App
+export default App;
