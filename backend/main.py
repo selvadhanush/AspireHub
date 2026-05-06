@@ -116,3 +116,81 @@ async def upload_pdf(file: UploadFile = File(...)):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process PDF: {str(e)}")
+
+class DesignRequest(BaseModel):
+    prompt: str
+
+@app.post("/copilot/design")
+async def generate_system_design(request: DesignRequest):
+    if not os.getenv("GROQ_API_KEY"):
+        raise HTTPException(status_code=500, detail="GROQ_API_KEY is not configured.")
+    
+    try:
+        # Retrieve relevant chunks from Chroma DB (optional RAG for system design docs)
+        embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+        try:
+            vectorstore = Chroma(persist_directory="./chroma_db", embedding_function=embeddings)
+            results = vectorstore.similarity_search(request.prompt, k=3)
+            context = "\n\n".join([doc.page_content for doc in results])
+        except Exception:
+            context = ""
+            
+        system_prompt = (
+            "You are an expert system design architect. Your task is to generate a comprehensive system design based on the user's request. "
+            "You MUST use Markdown formatting for your response. Specifically:\n"
+            "- Use '###' for each major section header (e.g., ### 1. Requirements).\n"
+            "- Use bold text for key terms.\n"
+            "- Use code blocks for DB schemas or API examples.\n"
+            "- In the HLD section, you MUST include a Mermaid diagram using a '```mermaid' block (use graph TD).\n"
+            "- IMPORTANT: In Mermaid diagrams, ALWAYS wrap node labels in double quotes if they contain spaces or special characters (e.g., A[\"API Gateway\"]). Avoid using parentheses inside labels.\n"
+            "- Use bullet points for lists.\n\n"
+            "Structure your response strictly with these sections:\n"
+            "1. Requirements\n"
+            "2. HLD (High-Level Design with Mermaid Diagram)\n"
+            "3. Components\n"
+            "4. DB (Database schema and choice)\n"
+            "5. APIs (Key endpoints)\n"
+            "6. Scaling (Strategies for scaling the system)\n\n"
+        )
+        if context:
+            system_prompt += f"Use the following provided context to inform your design if relevant:\n\nContext:\n{context}"
+
+        response = await client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": request.prompt}
+            ]
+        )
+        return {"response": response.choices[0].message.content}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class InterviewRequest(BaseModel):
+    messages: list
+
+@app.post("/copilot/interview")
+async def system_design_interview(request: InterviewRequest):
+    if not os.getenv("GROQ_API_KEY"):
+        raise HTTPException(status_code=500, detail="GROQ_API_KEY is not configured.")
+    
+    try:
+        system_prompt = (
+            "You are an expert system design interviewer at a top-tier tech company (FAANG). "
+            "Your goal is to conduct a realistic system design interview. "
+            "1. Start by asking the candidate what system they would like to design if they haven't picked one.\n"
+            "2. Drill down into Functional and Non-functional requirements.\n"
+            "3. Ask about High-Level Design, Bottlenecks, and Scaling strategies.\n"
+            "4. Provide constructive feedback on their answers.\n"
+            "Keep your responses concise and focused on one or two questions at a time to keep the interaction dynamic."
+        )
+
+        messages = [{"role": "system", "content": system_prompt}] + request.messages
+
+        response = await client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=messages
+        )
+        return {"response": response.choices[0].message.content}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
